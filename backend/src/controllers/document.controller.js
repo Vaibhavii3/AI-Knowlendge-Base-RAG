@@ -183,6 +183,19 @@ exports.ingestDemoPdf = async (req, res) => {
   }
 };
 
+exports.listDocuments = async (req, res) => {
+  try {
+    const documents = await Document.find({})
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .select("-extractedText -embeddings");
+
+    return res.json({ documents });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+};
+
 exports.listChunks = async (req, res) => {
   try {
     const limitRaw = Number(req.query.limit ?? 10);

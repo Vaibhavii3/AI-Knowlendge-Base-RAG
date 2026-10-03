@@ -59,6 +59,26 @@ router.post(
   documentController.uploadDocument
 );
 
+/**
+ * @openapi
+ * /api/documents:
+ *   get:
+ *     tags: [Documents]
+ *     summary: List ingested documents
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Document list (without extractedText/embeddings)
+ *       401:
+ *         description: Missing/invalid token
+ */
+router.get(
+  "/",
+  authMiddleware,
+  documentController.listDocuments
+);
+
 router.get(
   "/demo-pdf",
   documentController.downloadDemoPdf
