@@ -1,108 +1,98 @@
-This project is a **backend AI knowledge base** that lets you turn PDFs into a searchable, question‑answering system using **retrieval‑augmented generation (RAG)**.
+This project is an **AI knowledge base** that turns PDFs into a searchable, question-answering system using **retrieval-augmented generation (RAG)** — with a full web UI on top.
 
 You can:
-- Upload PDFs,
-- Automatically extract and chunk the text,
-- Generate dense vector embeddings,
-- Search semantically and by keyword,
-- And ask natural‑language questions that are answered using the content of your documents.
-
-The goal is to look and behave like a **mini internal documentation assistant** you could plug into any app.
+- Register / log in,
+- Upload PDFs (or ingest a built-in demo PDF),
+- Automatically extract, chunk, and embed the text,
+- Search semantically + by keyword (hybrid, RRF-fused),
+- And chat with an AI that answers from your documents and shows its sources.
 
 ---
 
-## What this project does
+## Project structure
 
-- **User authentication (JWT)**
-  - Register, login, and get the current user.
-  - Protect all document and AI endpoints with a bearer token.
+```
+AI-Knowlendge-Base-RAG/
+├── backend/    Express + MongoDB Atlas API (RAG pipeline)
+│   ├── src/
+│   │   ├── server.js        entry point (Mongo connect, listens on PORT)
+│   │   ├── app.js           express app, CORS, Swagger UI, routers
+│   │   ├── config/          db, swagger
+│   │   ├── controllers/     auth, documents, search, ask
+│   │   ├── middlewares/     JWT auth, multer upload
+│   │   ├── models/          user, document, chunk
+│   │   ├── routes/          /api/auth, /api/documents, /api/search, /api/ai
+│   │   ├── services/        embeddings, hybrid search (RRF), RAG, Groq
+│   │   └── utils/           sentence-aware chunker
+│   └── uploads/             stored PDFs (gitignored)
+├── frontend/   React + Vite + Tailwind CSS v4 web app
+│   └── src/
+│       ├── api/client.js    axios instance (base URL, JWT interceptor, 401 redirect)
+│       ├── context/         AuthContext (token + user in localStorage)
+│       ├── components/      Layout (sidebar), ProtectedRoute
+│       └── pages/           Login, Register, Documents, Search, Ask
+├── docs/       design notes
+└── package.json  root dev runner (concurrently)
+```
 
-- **Document → Knowledge base pipeline**
-  - Accept **PDF uploads** (Multer, stored on disk).
-  - Extract full text from PDFs.
-  - Split text into overlapping chunks.
-  - Generate **384‑dimensional embeddings** for each chunk using **Hugging Face Inference**.
-  - Store documents and chunks in **MongoDB** with both text and vector representations.
+## Getting started
 
-- **Search over your knowledge**
-  - **Keyword search** using MongoDB text indexes (title, extracted text, chunk text).
-  - **Vector search** using MongoDB Atlas vector indexes for:
-    - Whole documents (`embeddings` field),
-    - Individual chunks (`embedding` field).
-  - **Hybrid search** that combines vector + keyword results to retrieve the most relevant chunks.
+```bash
+npm run install:all   # installs root, backend, and frontend deps
+npm run dev           # starts backend (:5000) + frontend (:5173) together
+```
 
-- **Ask questions with context (RAG)**
-  - Take a question from the user.
-  - Retrieve the most relevant documents/chunks.
-  - Build a trimmed context window.
-  - Call **Groq** with a modern LLaMA‑3.1 model to generate a grounded answer.
-  - Return both the answer and the source chunks/documents so the user can see *where* the answer came from.
+Open the app at **http://localhost:5173**.
+Swagger API docs: **http://localhost:5000/api-docs**
+
+In dev, the frontend proxies `/api/*` to `http://localhost:5000` (see `frontend/vite.config.js`), so no CORS setup is needed.
+
+### Environment variables
+
+`backend/.env`:
+
+| Variable | Purpose |
+|---|---|
+| `PORT` | API port (default 5000) |
+| `SERVER_URL` | Public URL used in Swagger docs |
+| `MONGO_URI` | MongoDB Atlas connection string (Atlas **vector search** indexes required: `chunk_vector_index`, `document_vector_index`) |
+| `JWT_SECRET` | Signing secret for auth tokens |
+| `HF_API_KEY` | Hugging Face token (embeddings: `sentence-transformers/all-MiniLM-L6-v2`) |
+| `GROQ_API_KEY` | Groq API key (LLM: `llama-3.1-8b-instant`) |
+
+`frontend/.env` (optional):
+
+| Variable | Purpose |
+|---|---|
+| `VITE_API_URL` | Override API base URL (defaults to `/api`, proxied in dev) |
 
 ---
 
-## Technologies used
+## What the app does
 
-- **Runtime / Framework**
-  - Node.js, Express
+- **Auth (JWT)** — register, login, protected routes via bearer token. The frontend auto-logs-in after registration and redirects to login on any 401.
+- **Document → knowledge pipeline** — PDF upload → text extraction → overlapping chunking → 384-dim Hugging Face embeddings → stored in MongoDB (documents + chunks).
+- **Hybrid search** — MongoDB Atlas `$vectorSearch` + text-index keyword search, fused with Reciprocal Rank Fusion (k = 60).
+- **RAG Q&A** — question → hybrid retrieval → token-budgeted context (~3000 tokens) → Groq LLaMA-3.1 answer, returned with ranked source chunks (each marked whether it made it into the context window).
 
-- **Data & search**
-  - MongoDB, Mongoose
-  - MongoDB Atlas **vector search** for document + chunk embeddings
-  - MongoDB **text indexes** for keyword search
+## API summary
 
-- **AI / ML**
-  - **Hugging Face Inference API** for sentence embeddings  
-    (`sentence-transformers/all-MiniLM-L6-v2`)
-  - **Groq Chat Completions API** for LLM answers  
-    (upgraded to a LLaMA‑3.1 based chat model)
-
-- **Other**
-  - Multer for file uploads
-  - PDF parsing for text extraction
-  - JWT (`jsonwebtoken`) + bcrypt for auth
-
----
-
-## How it works
-
-1. **Authenticate**
-   - Client registers/logs in and receives a JWT.
-   - All knowledge base and AI routes are behind `Authorization: Bearer <token>`.
-
-## API docs (Swagger)
-
-After starting the server, open Swagger UI at:
-- `http://localhost:5000/api-docs`
-
-If you set a different port, use:
-- `http://localhost:<PORT>/api-docs`
-
-2. **Ingest documents**
-   - Upload a PDF or call the demo‑ingest endpoint.
-   - The backend parses the PDF, extracts text, chunks it, embeds each chunk, and stores everything in MongoDB.
-   - A document‑level embedding is computed by averaging chunk embeddings, enabling fast document‑level vector search.
-
-3. **Search**
-   - **Keyword search**: simple queries over titles and full text.
-   - **Vector search**: semantic similarity queries like _“backend api phases”_ or _“how do I deploy the API?”_.
-   - **Hybrid search**: combines both to feed the RAG pipeline with the most relevant context.
-
-4. **Ask AI**
-   - User sends a natural‑language question.
-   - The backend retrieves context from the knowledge base and trims it to fit model limits.
-   - Groq generates an answer grounded in the retrieved context.
-   - The response includes both the **answer** and the **supporting chunks/documents**.
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| POST | `/api/auth/register` | – | Create account |
+| POST | `/api/auth/login` | – | Get JWT |
+| GET | `/api/auth/me` | ✓ | Current user |
+| GET | `/api/documents` | ✓ | List ingested documents |
+| POST | `/api/documents/upload` | ✓ | Upload + ingest PDF |
+| POST | `/api/documents/demo-ingest` | ✓ | Ingest built-in demo PDF |
+| GET | `/api/documents/chunks` | ✓ | Recent chunks |
+| POST | `/api/search/search` | ✓ | Hybrid (vector + keyword) chunk search |
+| POST | `/api/ai/ask` | ✓ | RAG question answering |
 
 ---
 
 ## Why this project matters (what it shows)
 
-This project demonstrates that you can:
-- Design and implement a **production‑style backend API** (auth, error handling, env configuration).
-- Build a full **RAG pipeline** end‑to‑end: ingestion, embeddings, vector search, and LLM prompting.
-- Integrate multiple external services (MongoDB Atlas, Hugging Face, Groq) in a clean way.
-
-
-
-
-
+- A **production-style backend API**: auth, error handling, env configuration, Swagger docs.
+- A full **RAG pipeline** end-to-end: ingestion, embeddings, vector + keyword retrieval, RRF fusion, and LLM prompting with context budgeting.
+- A clean **frontend** on top: React + Tailwind, JWT auth flow, file upload with progress, search UI, and a chat UI with visible sources.
