@@ -1,25 +1,33 @@
 const hybridSearch = require("./hybridSearchService");
 const { askAI } = require("./ai.service");
 
+// ~4 chars per token is the standard estimate for English text
+const MAX_CONTEXT_TOKENS = Number(process.env.MAX_CONTEXT_TOKENS) || 3000;
+
+const estimateTokens = (text) => Math.ceil(text.length / 4);
+
+const buildContext = (rankedChunks, maxTokens = MAX_CONTEXT_TOKENS) => {
+  const parts = [];
+  let used = 0;
+
+  const sources = rankedChunks.map(({ chunk, score }) => {
+    const tokens = estimateTokens(chunk.text || "");
+    const fits = used + tokens <= maxTokens;
+    if (fits) {
+      parts.push(chunk.text);
+      used += tokens;
+    }
+    return { chunk, score, inContext: fits };
+  });
+
+  return { context: parts.join("\n\n"), sources };
+};
+
 const askQuestion = async (question) => {
-
-  // 1 search documents
   const results = await hybridSearch(question);
-
-  // 2 extract text
-  const context = results
-    .map(chunk => chunk.text)
-    .join("\n\n");
-
-    const MAX_CONTEXT_CHARS = 4000;
-    const trimmedContext = context.slice(0, MAX_CONTEXT_CHARS);
-    // 3 send to LLM
-    const answer = await askAI(trimmedContext, question);
-
-  return {
-    answer,
-    sources: results
-  };
+  const { context, sources } = buildContext(results);
+  const answer = await askAI(context, question);
+  return { answer, sources };
 };
 
 module.exports = askQuestion;

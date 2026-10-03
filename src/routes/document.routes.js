@@ -159,47 +159,6 @@ router.get(
 
 /**
  * @openapi
- * /api/documents/ask:
- *   post:
- *     tags: [Documents]
- *     summary: Ask a question using top text-matched documents (simple RAG)
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [question]
- *             properties:
- *               question: { type: string, example: "Phase 2: API Design me kya hota hai?" }
- *     responses:
- *       200:
- *         description: Answer
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 question: { type: string }
- *                 answer: { type: string }
- *             example:
- *               question: "Phase 2: API Design me kya hota hai?"
- *               answer: "Phase 2 me REST routes, request/response schemas, error handling, validation, aur pagination design kiya jata hai."
- *       400:
- *         description: Missing question
- *       401:
- *         description: Missing/invalid token
- */
-router.post(
-  "/ask",
-  authMiddleware,
-  documentController.askQuestion
-);
-
-/**
- * @openapi
  * /api/documents/vector-search:
  *   post:
  *     tags: [Documents]

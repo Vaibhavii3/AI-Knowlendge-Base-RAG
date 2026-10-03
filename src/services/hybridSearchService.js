@@ -1,36 +1,71 @@
 const Chunk = require("../models/chunk.model");
 const { generateEmbedding } = require("./embedding.service");
 
-const hybridSearch = async (query) => {
+// standard RRF constant (Cormack et al., 2009): dampens single-list top ranks
+// so agreement between the two retrievers matters more than position in one
+const RRF_K = 60;
 
-  // 1️⃣ create embedding
+const rrfFuse = (resultLists) => {
+  const fused = new Map();
+
+  for (const results of resultLists) {
+    results.forEach((chunk, i) => {
+      const id = String(chunk._id);
+      const contribution = 1 / (RRF_K + i + 1);
+      const entry = fused.get(id) || { chunk, score: 0 };
+      entry.score += contribution;
+      fused.set(id, entry);
+    });
+  }
+
+  return [...fused.values()].sort((a, b) => b.score - a.score);
+};
+
+const hybridSearch = async (query, limit = 5) => {
   const queryEmbedding = await generateEmbedding(query);
 
-  // 2️⃣ vector search
   const vectorResults = await Chunk.aggregate([
     {
       $vectorSearch: {
         queryVector: queryEmbedding,
         path: "embedding",
         numCandidates: 100,
-        limit: 5,
-        index: "chunk_vector_index"
-      }
-    }
-  ]);
+        limit,
+        index: "chunk_vector_index",
+      },
+    },
+    // keep the 384-dim vector out of the response payload
+    { $project: { text: 1, documentId: 1, chunkIndex: 1, createdAt: 1 } },
+  ]).catch((e) => {
+    // no Atlas / missing index: degrade to keyword-only instead of failing
+    console.error("Vector search unavailable, using keyword only:", e.message);
+    return [];
+  });
 
-  // 3️⃣ keyword search
   const keywordResults = await Chunk.find(
     { $text: { $search: query } },
-    { score: { $meta: "textScore" } }
+    {
+      score: { $meta: "textScore" },
+      text: 1,
+      documentId: 1,
+      chunkIndex: 1,
+      createdAt: 1,
+    }
   )
-  .sort({ score: { $meta: "textScore" } })
-  .limit(5);
+    .sort({ score: { $meta: "textScore" } })
+    .limit(limit)
+    .lean()
+    .catch((e) => {
+      console.error("Keyword search failed:", e.message);
+      return [];
+    });
 
-  // 4️⃣ merge results
-  const combined = [...vectorResults, ...keywordResults];
+  if (!vectorResults.length && !keywordResults.length) {
+    throw new Error("Both vector and keyword search failed");
+  }
 
-  return combined;
+  return rrfFuse([vectorResults, keywordResults]);
 };
 
 module.exports = hybridSearch;
+module.exports.rrfFuse = rrfFuse;

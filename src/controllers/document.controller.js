@@ -1,14 +1,12 @@
-const { askAI } = require("../services/ai.service");
 const fs = require("fs");
 const path = require("path");
-// pdf-parse@1.x exposes a simple function API
-const pdfParse = require("pdf-parse");
+const { PDFParse } = require("pdf-parse");
 const PDFDocument = require("pdfkit");
 
 const Document = require("../models/document.model");
 const Chunk = require("../models/chunk.model");
 const { chunkText } = require("../utils/chunkText");
-const { generateEmbedding } = require("../services/embedding.service");
+const { generateEmbeddings } = require("../services/embedding.service");
 
 const to1dEmbedding = (embedding) => {
   if (!Array.isArray(embedding)) return [];
@@ -80,10 +78,12 @@ const createDemoPdfBuffer = async () => {
 };
 
 const ingestPdfBuffer = async ({ fileBuffer, title, fileUrl, fileType, uploadedBy }) => {
-  const pdfData = await pdfParse(fileBuffer);
+  const parser = new PDFParse({ data: new Uint8Array(fileBuffer) });
+  const pdfData = await parser.getText();
+  await parser.destroy();
   const extractedText = pdfData?.text || "";
 
-  const chunks = chunkText(extractedText, 500).filter((c) => c && c.trim().length > 0);
+  const chunks = chunkText(extractedText).filter((c) => c && c.trim().length > 0);
 
   const document = await Document.create({
     title,
@@ -93,18 +93,16 @@ const ingestPdfBuffer = async ({ fileBuffer, title, fileUrl, fileType, uploadedB
     extractedText
   });
 
-  const chunkEmbeddings = [];
-  for (let i = 0; i < chunks.length; i++) {
-    const embedding = to1dEmbedding(await generateEmbedding(chunks[i]));
-    chunkEmbeddings.push(embedding);
+  const chunkEmbeddings = (await generateEmbeddings(chunks)).map(to1dEmbedding);
 
-    await Chunk.create({
+  await Chunk.insertMany(
+    chunks.map((text, i) => ({
       documentId: document._id,
-      text: chunks[i],
-      embedding,
+      text,
+      embedding: chunkEmbeddings[i],
       chunkIndex: i
-    });
-  }
+    }))
+  );
 
   const docEmbedding = meanEmbedding(chunkEmbeddings);
   if (docEmbedding.length > 0) {
@@ -227,38 +225,6 @@ exports.searchDocuments = async (req, res) => {
   }
 };
 
-
-exports.askQuestion = async (req, res) => {
-  try {
-
-    const { question } = req.body;
-
-    if (!question) {
-      return res.status(400).json({ message: "Question required" });
-    }
-
-    const documents = await Document.find(
-      { $text: { $search: question } }
-    ).limit(3);
-
-    const context = documents
-      .map((doc) => doc.extractedText)
-      .join("\n\n");
-
-    const MAX_CONTEXT_CHARS = 4000;
-    const trimmedContext = context.slice(0, MAX_CONTEXT_CHARS);
-
-    const answer = await askAI(trimmedContext, question);
-
-    res.json({
-      question,
-      answer,
-    });
-
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
 
 exports.vectorSearch = async (req, res) => {
   try {
