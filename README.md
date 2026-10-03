@@ -55,10 +55,11 @@ In dev, the frontend proxies `/api/*` to `http://localhost:5000` (see `frontend/
 |---|---|
 | `PORT` | API port (default 5000) |
 | `SERVER_URL` | Public URL used in Swagger docs |
-| `MONGO_URI` | MongoDB Atlas connection string (Atlas **vector search** indexes required: `chunk_vector_index`, `document_vector_index`) |
+| `MONGO_URI` | MongoDB connection string. **Vector search requires MongoDB Atlas** (indexes: `chunk_vector_index`, `document_vector_index`); on a local MongoDB the app degrades to keyword-only search automatically |
 | `JWT_SECRET` | Signing secret for auth tokens |
 | `HF_API_KEY` | Hugging Face token (embeddings: `sentence-transformers/all-MiniLM-L6-v2`) |
-| `GROQ_API_KEY` | Groq API key (LLM: `llama-3.1-8b-instant`) |
+| `GROQ_API_KEY` | Groq API key |
+| `GROQ_MODEL` | Optional override (default: `openai/gpt-oss-20b`) |
 
 `frontend/.env` (optional):
 
@@ -73,7 +74,7 @@ In dev, the frontend proxies `/api/*` to `http://localhost:5000` (see `frontend/
 - **Auth (JWT)** — register, login, protected routes via bearer token. The frontend auto-logs-in after registration and redirects to login on any 401.
 - **Document → knowledge pipeline** — PDF upload → text extraction → overlapping chunking → 384-dim Hugging Face embeddings → stored in MongoDB (documents + chunks).
 - **Hybrid search** — MongoDB Atlas `$vectorSearch` + text-index keyword search, fused with Reciprocal Rank Fusion (k = 60).
-- **RAG Q&A** — question → hybrid retrieval → token-budgeted context (~3000 tokens) → Groq LLaMA-3.1 answer, returned with ranked source chunks (each marked whether it made it into the context window).
+- **RAG Q&A** — question → hybrid retrieval → token-budgeted context (~3000 tokens) → Groq answer (default `openai/gpt-oss-20b`), returned with ranked source chunks (each marked whether it made it into the context window).
 
 ## API summary
 

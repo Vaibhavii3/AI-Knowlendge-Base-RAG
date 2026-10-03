@@ -85,6 +85,9 @@ const ingestPdfBuffer = async ({ fileBuffer, title, fileUrl, fileType, uploadedB
 
   const chunks = chunkText(extractedText).filter((c) => c && c.trim().length > 0);
 
+  // embed BEFORE creating the document so a failed HF call can't leave an orphan doc
+  const chunkEmbeddings = (await generateEmbeddings(chunks)).map(to1dEmbedding);
+
   const document = await Document.create({
     title,
     fileUrl,
@@ -92,8 +95,6 @@ const ingestPdfBuffer = async ({ fileBuffer, title, fileUrl, fileType, uploadedB
     uploadedBy,
     extractedText
   });
-
-  const chunkEmbeddings = (await generateEmbeddings(chunks)).map(to1dEmbedding);
 
   await Chunk.insertMany(
     chunks.map((text, i) => ({
