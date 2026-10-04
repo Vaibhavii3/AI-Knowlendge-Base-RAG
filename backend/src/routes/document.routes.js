@@ -133,6 +133,33 @@ router.get(
 
 /**
  * @openapi
+ * /api/documents/{id}:
+ *   delete:
+ *     tags: [Documents]
+ *     summary: Delete a document, its chunks, and stored file
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Document deleted
+ *       404:
+ *         description: Document not found
+ *       401:
+ *         description: Missing/invalid token
+ */
+router.delete(
+  "/:id",
+  authMiddleware,
+  documentController.deleteDocument
+);
+
+/**
+ * @openapi
  * /api/documents/search:
  *   get:
  *     tags: [Documents]

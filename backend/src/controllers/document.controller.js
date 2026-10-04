@@ -189,9 +189,40 @@ exports.listDocuments = async (req, res) => {
     const documents = await Document.find({})
       .sort({ createdAt: -1 })
       .limit(50)
-      .select("-extractedText -embeddings");
+      .select("-extractedText -embeddings")
+      .lean();
 
-    return res.json({ documents });
+    return res.json({
+      documents: documents.map(({ fileUrl, ...doc }) => ({
+        ...doc,
+        fileName: fileUrl ? path.basename(fileUrl) : null
+      }))
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+exports.deleteDocument = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const document = await Document.findById(id);
+    if (!document) {
+      return res.status(404).json({ message: "Document not found" });
+    }
+
+    await Chunk.deleteMany({ documentId: document._id });
+
+    if (document.fileUrl) {
+      await fs.promises.unlink(document.fileUrl).catch((e) => {
+        if (e.code !== "ENOENT") console.error("Failed to remove file:", e.message);
+      });
+    }
+
+    await Document.deleteOne({ _id: document._id });
+
+    return res.json({ message: "Document deleted", documentId: document._id });
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }

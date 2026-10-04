@@ -16,7 +16,7 @@ const authMiddleware = require("../middlewares/auth.middleware");
  * /api/ai/ask:
  *   post:
  *     tags: [AI]
- *     summary: Ask a question (RAG)
+ *     summary: Ask a question (RAG, optional SSE streaming)
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -29,29 +29,26 @@ const authMiddleware = require("../middlewares/auth.middleware");
  *             properties:
  *               question:
  *                 type: string
- *                 example: "Backend API phases kya hain?"
+ *                 example: "What are the backend API phases?"
+ *               mode:
+ *                 type: string
+ *                 enum: [short, detailed]
+ *                 default: detailed
+ *               history:
+ *                 type: array
+ *                 description: Last few turns for follow-up questions
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     role: { type: string, enum: [user, assistant] }
+ *                     text: { type: string }
+ *               stream:
+ *                 type: boolean
+ *                 default: false
+ *                 description: When true, responds with text/event-stream (sources event, delta events, [DONE])
  *     responses:
  *       200:
- *         description: Answer with sources
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean }
- *                 answer: { type: string }
- *                 sources:
- *                   type: array
- *                   items:
- *                     $ref: "#/components/schemas/Chunk"
- *             example:
- *               success: true
- *               answer: "Backend API ke phases generally Requirements & Planning, API Design, Implementation, Testing, aur Deployment & Monitoring hote hain."
- *               sources:
- *                 - _id: "65f1c2a9b3f1a2c3d4e5f001"
- *                   documentId: "65f1c2a9b3f1a2c3d4e5f678"
- *                   chunkIndex: 0
- *                   text: "Phase 1: Requirements & Planning..."
+ *         description: Answer with sources (JSON), or SSE stream when stream=true
  *       401:
  *         description: Missing/invalid token
  */
