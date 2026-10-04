@@ -36,6 +36,9 @@ const hybridSearch = async (query, limit = 5) => {
     },
     // keep the 384-dim vector out of the response payload
     { $project: { text: 1, documentId: 1, chunkIndex: 1, createdAt: 1 } },
+    { $lookup: { from: "documents", localField: "documentId", foreignField: "_id", as: "document" } },
+    { $addFields: { documentTitle: { $arrayElemAt: ["$document.title", 0] } } },
+    { $unset: "document" },
   ]).catch((e) => {
     // no Atlas / missing index: degrade to keyword-only instead of failing
     console.error("Vector search unavailable, using keyword only:", e.message);
@@ -54,14 +57,22 @@ const hybridSearch = async (query, limit = 5) => {
   )
     .sort({ score: { $meta: "textScore" } })
     .limit(limit)
+    .populate("documentId", "title")
     .lean()
+    .then((results) =>
+      results.map(({ documentId, ...chunk }) => ({
+        ...chunk,
+        documentTitle: documentId?.title,
+      }))
+    )
     .catch((e) => {
       console.error("Keyword search failed:", e.message);
       return [];
     });
 
   if (!vectorResults.length && !keywordResults.length) {
-    throw new Error("Both vector and keyword search failed");
+    // empty result set is a valid answer state — the AI layer reports "not covered"
+    return [];
   }
 
   return rrfFuse([vectorResults, keywordResults]);
