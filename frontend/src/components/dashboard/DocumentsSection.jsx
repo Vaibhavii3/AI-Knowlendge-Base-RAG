@@ -13,6 +13,8 @@ import {
   TriangleAlert,
 } from 'lucide-react'
 import api from '../../api/client'
+
+const API_ORIGIN = (import.meta.env.VITE_API_URL || '').replace(/\/api$/, '')
 import { useToast } from '../ui/Toast'
 import useClickOutside from '../../utils/useClickOutside'
 import { formatDate } from '../../utils/format'
@@ -43,7 +45,7 @@ function DocMenu({ doc, onDelete }) {
           >
             {doc.fileName && (
               <a
-                href={`/uploads/${doc.fileName}`}
+                href={`${API_ORIGIN}/uploads/${doc.fileName}`}
                 download
                 onClick={() => setOpen(false)}
                 className="flex items-center gap-2.5 px-3 py-2 text-[13px] text-slate-700 transition-colors hover:bg-slate-50"

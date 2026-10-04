@@ -12,7 +12,23 @@ const { createSwaggerSpec } = require("./config/swagger");
 
 const app = express();
 
-app.use(cors());
+// comma-separated whitelist (e.g. the deployed frontend); unset = allow all (local dev)
+const allowedOrigins = (process.env.CORS_ORIGIN || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // no-origin requests (curl, Render health checks) always pass
+      if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(null, false);
+    },
+  })
+);
 app.use(express.json());
 
 // serve ingested files so the dashboard can offer document downloads
